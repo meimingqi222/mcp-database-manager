@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+
+# Local configuration
+config.yaml
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+.agent
+test_env/
+verify_output.txt

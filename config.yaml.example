@@ -1,0 +1,9 @@
+connections:
+  - name: "example_sqlite"
+    url: "sqlite:///./example.db"
+    readonly: true
+
+  # Example PostgreSQL connection
+  # - name: "local_postgres"
+  #   url: "postgresql://user:password@localhost/dbname"
+  #   readonly: true

@@ -1,0 +1,26 @@
+[project]
+name = "mcp-database-manager"
+version = "0.1.0"
+description = "MCP server for database management"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp",
+    "sqlalchemy",
+    "pyyaml",
+    "pydantic",
+    "platformdirs"
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg2-binary"]
+mysql = ["pymysql", "cryptography"]
+mssql = ["pymssql"]
+all = ["psycopg2-binary", "pymysql", "cryptography", "pymssql"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+mcp-database-manager = "mcp_database_manager.server:main"
