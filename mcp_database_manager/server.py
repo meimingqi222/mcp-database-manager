@@ -33,11 +33,16 @@ def main():
             ),
             types.Tool(
                 name="get_schema",
-                description="Get the schema of a specific database.",
+                description="Get the schema of a specific database. By default, returns a summary of all tables. Provide 'table_names' to get detailed column information for specific tables.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "connection_name": {"type": "string", "description": "Name of the database connection"},
+                        "table_names": {
+                            "type": "array", 
+                            "items": {"type": "string"},
+                            "description": "Optional list of table names to get detailed schema for. If omitted, returns a summary of all tables."
+                        },
                     },
                     "required": ["connection_name"],
                 },
@@ -83,11 +88,12 @@ def main():
 
         elif name == "get_schema":
             connection_name = arguments.get("connection_name")
+            table_names = arguments.get("table_names")
             if not connection_name:
                 raise ValueError("connection_name is required")
             
             try:
-                schema = db_manager.get_schema(connection_name)
+                schema = db_manager.get_schema(connection_name, table_names)
                 return [types.TextContent(type="text", text=schema)]
             except Exception as e:
                 return [types.TextContent(type="text", text=f"Error: {str(e)}")]

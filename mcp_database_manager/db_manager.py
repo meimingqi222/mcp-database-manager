@@ -23,24 +23,60 @@ class DatabaseManager:
         except Exception as e:
             raise RuntimeError(f"Failed to create engine for '{connection_name}': {e}")
 
-    def get_schema(self, connection_name: str) -> str:
+    def get_schema(self, connection_name: str, table_names: Optional[List[str]] = None) -> str:
         engine = self._get_engine(connection_name)
         inspector = inspect(engine)
         
-        schema_md = f"# Schema for {connection_name}\n\n"
+        all_tables = inspector.get_table_names()
         
-        for table_name in inspector.get_table_names():
-            schema_md += f"## Table: {table_name}\n\n"
-            columns = inspector.get_columns(table_name)
-            if columns:
-                schema_md += "| Column | Type | Nullable | Default |\n"
-                schema_md += "|---|---|---|---|\n"
-                for col in columns:
-                    default_val = col.get('default', '')
-                    if default_val is None:
-                        default_val = 'NULL'
-                    schema_md += f"| {col['name']} | {col['type']} | {col['nullable']} | {default_val} |\n"
-            schema_md += "\n"
+        # If specific tables are requested, filter them.
+        # Otherwise, we will show a summary of all tables.
+        target_tables = table_names if table_names else all_tables
+        is_summary_mode = table_names is None
+        
+        if is_summary_mode:
+            schema_md = f"# Database Summary for {connection_name}\n\n"
+            schema_md += "> **Tip**: This is a summary view. To see column details, call `get_schema` with the specific `table_names` you are interested in.\n\n"
+            schema_md += "| Table | Description |\n"
+            schema_md += "|---|---|\n"
+        else:
+            schema_md = f"# Schema Details for {connection_name}\n\n"
+
+        for table_name in target_tables:
+            # Skip tables that don't exist if user requested them explicitly (optional safety)
+            if table_name not in all_tables:
+                continue
+
+            # Get table comment
+            try:
+                table_comment = inspector.get_table_comment(table_name)
+                description = table_comment['text'] if table_comment and table_comment.get('text') else ''
+            except Exception:
+                description = ''
+
+            if is_summary_mode:
+                # Summary Row
+                schema_md += f"| {table_name} | {description} |\n"
+            else:
+                # Detailed View
+                schema_md += f"## Table: {table_name}\n\n"
+                if description:
+                    schema_md += f"**Description**: {description}\n\n"
+
+                columns = inspector.get_columns(table_name)
+                if columns:
+                    schema_md += "| Column | Type | Nullable | Default | Comment |\n"
+                    schema_md += "|---|---|---|---|---|\n"
+                    for col in columns:
+                        default_val = col.get('default', '')
+                        if default_val is None:
+                            default_val = 'NULL'
+                        
+                        comment = col.get('comment')
+                        comment_str = str(comment) if comment else ''
+                        
+                        schema_md += f"| {col['name']} | {col['type']} | {col['nullable']} | {default_val} | {comment_str} |\n"
+                schema_md += "\n"
             
         return schema_md
 
