@@ -7,6 +7,7 @@ An MCP server that enables LLM agents to perform CRUD operations across multiple
 - Multi-Database Support
 - Permission Management (Read-only by default)
 - SQLAlchemy Integration
+- `list_connections` redacts passwords from connection URLs in its output
 
 ## Database Support
 

@@ -10,6 +10,22 @@ import mcp.types as types
 from .config import ConfigManager
 from .db_manager import DatabaseManager
 
+
+def _redact_connection_url(url: str) -> str:
+    """Best-effort redaction of secrets in SQLAlchemy-style URLs.
+
+    Prefers SQLAlchemy's URL renderer (hide_password=True). Falls back to returning
+    the original string if parsing fails.
+    """
+
+    try:
+        # SQLAlchemy dependency is already required by this project.
+        from sqlalchemy.engine.url import make_url
+
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:
+        return url
+
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -25,50 +41,98 @@ def main():
         return [
             types.Tool(
                 name="list_connections",
-                description="List available database connections and their permission status.",
+                description=(
+                    "List configured database connections and their permission (readonly)."
+                    " Passwords are redacted from URLs in the output."
+                    " Returns: JSON array of connection configs."
+                ),
                 inputSchema={
+                    "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                        "include_urls": {
+                            "type": "boolean",
+                            "description": "Whether to include (redacted) connection URLs in the output. Default: true.",
+                        }
+                    },
+                    "required": ["include_urls"],
+                    "additionalProperties": False,
                 },
             ),
             types.Tool(
                 name="get_schema",
-                description="Get the schema of a specific database. By default, returns a summary of all tables. Provide 'table_names' to get detailed column information for specific tables.",
+                description=(
+                    "获取数据库 schema（Markdown）。默认返回所有表的摘要；"
+                    "传入 table_names 时返回这些表的列详情。"
+                ),
                 inputSchema={
+                    "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
                     "properties": {
-                        "connection_name": {"type": "string", "description": "Name of the database connection"},
+                        "connection_name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Connection name (matches config.yaml connections[].name)",
+                        },
                         "table_names": {
-                            "type": "array", 
-                            "items": {"type": "string"},
-                            "description": "Optional list of table names to get detailed schema for. If omitted, returns a summary of all tables."
+                            "type": "array",
+                            "items": {"type": "string", "minLength": 1},
+                            "description": "Optional list of table names. If omitted, returns a summary of all tables.",
                         },
                     },
                     "required": ["connection_name"],
+                    "additionalProperties": False,
                 },
             ),
             types.Tool(
                 name="read_sql",
-                description="Execute a read-only SQL query.",
+                description=(
+                    "执行只读 SQL 查询（例如 SELECT/SHOW/PRAGMA）。"
+                    " Returns: JSON array of rows."
+                ),
                 inputSchema={
+                    "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
                     "properties": {
-                        "connection_name": {"type": "string", "description": "Name of the database connection"},
-                        "query": {"type": "string", "description": "SQL query to execute"},
+                        "connection_name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Connection name (matches config.yaml connections[].name)",
+                        },
+                        "query": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "SQL to execute (read-only)",
+                        },
                     },
                     "required": ["connection_name", "query"],
+                    "additionalProperties": False,
                 },
             ),
             types.Tool(
                 name="write_sql",
-                description="Execute a write SQL query (INSERT, UPDATE, DELETE). Only works if connection is not read-only.",
+                description=(
+                    "执行写入 SQL（INSERT/UPDATE/DELETE/DDL）。"
+                    " 仅当连接 readonly=false 时允许。"
+                    " Returns: JSON {status, rows_affected}."
+                ),
                 inputSchema={
+                    "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
                     "properties": {
-                        "connection_name": {"type": "string", "description": "Name of the database connection"},
-                        "query": {"type": "string", "description": "SQL query to execute"},
+                        "connection_name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Connection name (matches config.yaml connections[].name)",
+                        },
+                        "query": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "SQL to execute (write)",
+                        },
                     },
                     "required": ["connection_name", "query"],
+                    "additionalProperties": False,
                 },
             ),
         ]
@@ -77,12 +141,31 @@ def main():
     async def call_tool(
         name: str, arguments: Any
     ) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+        # Some MCP clients may send `arguments` as `None` or a non-dict type.
+        # Normalize to a dict so `.get()` usage below is safe.
+        if not isinstance(arguments, dict):
+            arguments = {}
+
         if name == "list_connections":
             connections = config_manager.list_connections()
+            include_urls = arguments.get("include_urls", True)
+
+            safe_connections = []
+            for c in connections:
+                data = c.dict()
+
+                if include_urls:
+                    if isinstance(data.get("url"), str):
+                        data["url"] = _redact_connection_url(data["url"])
+                else:
+                    data.pop("url", None)
+
+                safe_connections.append(data)
+
             return [
                 types.TextContent(
                     type="text",
-                    text=json.dumps([c.dict() for c in connections], indent=2),
+                    text=json.dumps(safe_connections, indent=2),
                 )
             ]
 
